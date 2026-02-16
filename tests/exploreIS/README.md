@@ -18,9 +18,9 @@ tests/exploreIS/
 │   ├── test_sifted_unit.py
 │   └── __init__.py
 │
-├── pilot/
-├── pythia/
-└── trace/
+├── pilot/     (TODO)
+├── pythia/    (TODO)
+└── trace/     (TODO)
 ```
 
 ## Test Types

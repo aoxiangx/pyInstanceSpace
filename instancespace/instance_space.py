@@ -485,12 +485,8 @@ class InstanceSpace:
     def _explore_prelim(self, x: NDArray[np.double]) -> NDArray[np.double]:
         """Apply PRELIM transformations to features.
 
-        Applies bounding and normalization using parameters learned during training.
-
-        Transformation order:
-        1. Bounding: Clip values to [lo_bound, hi_bound]
-        2. Box-Cox: Apply power transformation with learned lambda
-        3. Z-score: Standardize using learned mu and sigma
+        Applies bounding, Box-Cox transformation, and z-score normalization
+        using parameters learned during training.
 
         Args
         ----
@@ -504,27 +500,21 @@ class InstanceSpace:
         """
         from scipy import stats
 
-        # Get trained parameters from model
         prelim = self._model.prelim  # type: ignore[union-attr]
 
         # Create a copy to avoid modifying input
         x_transformed = x.copy()
         n_features = x.shape[1]
 
-        # Apply transformations feature-by-feature
         for i in range(n_features):
-            # Step 1: Apply bounding (clip outliers)
             x_transformed[:, i] = np.clip(
                 x_transformed[:, i],
                 prelim.lo_bound[i],
                 prelim.hi_bound[i]
             )
 
-            # Step 2: Prepare for Box-Cox (shift to positive values)
             x_transformed[:, i] = x_transformed[:, i] - prelim.min_x[i] + 1
 
-            # Step 3: Apply Box-Cox transformation
-            # Handle NaN values
             idx_valid = ~np.isnan(x_transformed[:, i])
             if np.any(idx_valid):
                 x_transformed[idx_valid, i] = stats.boxcox(
@@ -532,7 +522,6 @@ class InstanceSpace:
                     prelim.lambda_x[i]
                 )
 
-            # Step 4: Apply z-score normalization
             if np.any(idx_valid):
                 x_transformed[idx_valid, i] = (
                     x_transformed[idx_valid, i] - prelim.mu_x[i]
@@ -542,9 +531,6 @@ class InstanceSpace:
 
     def _explore_sifted(self, x: NDArray[np.double]) -> NDArray[np.double]:
         """Apply feature selection from SIFTED stage.
-
-        Selects the subset of features identified during training using
-        the selvars indices from the trained model.
 
         Args
         ----
@@ -557,20 +543,14 @@ class InstanceSpace:
                 Feature matrix with selected features only.
                 Shape: (n_instances, n_selected_features).
         """
-        # Get selected feature indices from trained model
         sifted = self._model.sifted  # type: ignore[union-attr]
         selected_indices = sifted.selvars
-
-        # Apply feature selection
-        # selvars contains 0-based indices of selected features
         x_selected = x[:, selected_indices]
 
         return x_selected
 
     def _explore_pilot(self, x: NDArray[np.double]) -> NDArray[np.double]:
         """Project features to 2D instance space using PILOT.
-
-        Applies the projection matrix learned during training.
 
         Args
         ----
@@ -585,10 +565,8 @@ class InstanceSpace:
         Note
         ----
             PLACEHOLDER - Currently returns zeros.
-            Will be implemented in Phase 2.
         """
         # TODO: Implement projection using self._model.pilot.a
-        # Formula: z = x @ a.T
         return np.zeros((x.shape[0], 2), dtype=np.double)
 
     def _explore_pythia(
@@ -596,8 +574,6 @@ class InstanceSpace:
         z: NDArray[np.double],
     ) -> tuple[NDArray[np.bool_], NDArray[np.double], NDArray[np.int_]] | None:
         """Get algorithm predictions using PYTHIA SVMs.
-
-        Applies trained SVM models to predict algorithm performance.
 
         Args
         ----
@@ -615,12 +591,8 @@ class InstanceSpace:
         Note
         ----
             PLACEHOLDER - Currently returns None.
-            Will be implemented in Phase 3.
         """
         # TODO: Implement SVM predictions using self._model.pythia
-        # - Normalize z using mu, sigma
-        # - Apply each SVM model
-        # - Compute selection based on precision-weighted predictions
         return None
 
     def _explore_trace(
@@ -628,8 +600,6 @@ class InstanceSpace:
         z: NDArray[np.double],
     ) -> tuple[NDArray[np.bool_], NDArray[np.bool_], NDArray[np.bool_]] | None:
         """Check footprint membership using TRACE polygons.
-
-        Tests whether instances fall within algorithm footprints.
 
         Args
         ----
@@ -647,10 +617,8 @@ class InstanceSpace:
         Note
         ----
             PLACEHOLDER - Currently returns None.
-            Will be implemented in Phase 4.
         """
         # TODO: Implement footprint containment using self._model.trace
-        # - Use polygon.contains() for each footprint
         return None
 
 
