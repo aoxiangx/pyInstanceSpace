@@ -487,6 +487,11 @@ class InstanceSpace:
 
         Applies bounding and normalization using parameters learned during training.
 
+        Transformation order:
+        1. Bounding: Clip values to [lo_bound, hi_bound]
+        2. Box-Cox: Apply power transformation with learned lambda
+        3. Z-score: Standardize using learned mu and sigma
+
         Args
         ----
             x : NDArray[np.double]
@@ -495,23 +500,51 @@ class InstanceSpace:
         Returns
         -------
             NDArray[np.double]
-                Transformed feature matrix.
-
-        Note
-        ----
-            PLACEHOLDER - Currently returns input unchanged.
-            Will be implemented in Phase 2.
+                Transformed feature matrix with shape (n_instances, n_features).
         """
-        # TODO: Implement PRELIM transformations using self._model.prelim
-        # - Apply bounding using hi_bound, lo_bound
-        # - Apply Box-Cox using min_x, lambda_x
-        # - Apply z-score using mu_x, sigma_x
-        return x
+        from scipy import stats
+
+        # Get trained parameters from model
+        prelim = self._model.prelim  # type: ignore[union-attr]
+
+        # Create a copy to avoid modifying input
+        x_transformed = x.copy()
+        n_features = x.shape[1]
+
+        # Apply transformations feature-by-feature
+        for i in range(n_features):
+            # Step 1: Apply bounding (clip outliers)
+            x_transformed[:, i] = np.clip(
+                x_transformed[:, i],
+                prelim.lo_bound[i],
+                prelim.hi_bound[i]
+            )
+
+            # Step 2: Prepare for Box-Cox (shift to positive values)
+            x_transformed[:, i] = x_transformed[:, i] - prelim.min_x[i] + 1
+
+            # Step 3: Apply Box-Cox transformation
+            # Handle NaN values
+            idx_valid = ~np.isnan(x_transformed[:, i])
+            if np.any(idx_valid):
+                x_transformed[idx_valid, i] = stats.boxcox(
+                    x_transformed[idx_valid, i],
+                    prelim.lambda_x[i]
+                )
+
+            # Step 4: Apply z-score normalization
+            if np.any(idx_valid):
+                x_transformed[idx_valid, i] = (
+                    x_transformed[idx_valid, i] - prelim.mu_x[i]
+                ) / prelim.sigma_x[i]
+
+        return x_transformed
 
     def _explore_sifted(self, x: NDArray[np.double]) -> NDArray[np.double]:
         """Apply feature selection from SIFTED stage.
 
-        Selects the subset of features identified during training.
+        Selects the subset of features identified during training using
+        the selvars indices from the trained model.
 
         Args
         ----
@@ -522,14 +555,17 @@ class InstanceSpace:
         -------
             NDArray[np.double]
                 Feature matrix with selected features only.
-
-        Note
-        ----
-            PLACEHOLDER - Currently returns input unchanged.
-            Will be implemented in Phase 2.
+                Shape: (n_instances, n_selected_features).
         """
-        # TODO: Implement feature selection using self._model.sifted.selvars
-        return x
+        # Get selected feature indices from trained model
+        sifted = self._model.sifted  # type: ignore[union-attr]
+        selected_indices = sifted.selvars
+
+        # Apply feature selection
+        # selvars contains 0-based indices of selected features
+        x_selected = x[:, selected_indices]
+
+        return x_selected
 
     def _explore_pilot(self, x: NDArray[np.double]) -> NDArray[np.double]:
         """Project features to 2D instance space using PILOT.
